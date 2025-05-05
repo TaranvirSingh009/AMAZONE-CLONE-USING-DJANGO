@@ -3,10 +3,12 @@ from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Q
-from .models import User, Product, Category, CartItem, Order, OrderItem
+from .models import User, Product, Category, CartItem, Order, OrderItem, Review
 from .forms import RegistrationForm, LoginForm
 from django.conf import settings
 import logging
+from django.http import JsonResponse
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +64,10 @@ def logout_view(request):
     return redirect('store:home')
 
 def catalog(request):
-    # Only initialize sample data if no products exist and we're not in a migration
     if not Product.objects.exists() and not getattr(settings, 'MIGRATION_MODULES', None):
         try:
             initialize_sample_data()
         except Exception as e:
-            # Log the error but don't crash the view
             print(f"Error initializing sample data: {e}")
     
     category_id = request.GET.get('category')
@@ -95,7 +95,7 @@ def catalog(request):
     })
 
 def product_detail(request, id):
-    product = get_object_or_404(Product, id=id)
+    product = get_object_or_404(Product.objects.prefetch_related('reviews'), id=id)
     return render(request, 'products/product_details.html', {'product': product})
 
 @login_required
@@ -145,6 +145,38 @@ def update_cart(request, item_id):
     return redirect('store:view_cart')
 
 @login_required
+def feedback_view(request, order_id):
+    order = get_object_or_404(Order, id=order_id, user=request.user)
+    
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            for item in order.orderitem_set.all():
+                if str(item.product.id) in data:
+                    review_data = data[str(item.product.id)]
+                    Review.objects.update_or_create(
+                        user=request.user,
+                        product=item.product,
+                        defaults={
+                            'rating': review_data['rating'],
+                            'comment': review_data.get('comment', '')
+                        }
+                    )
+            return JsonResponse({'success': True})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    
+    products_to_review = []
+    for item in order.orderitem_set.all():
+        if not Review.objects.filter(user=request.user, product=item.product).exists():
+            products_to_review.append(item.product)
+    
+    return render(request, 'feedback/feedback_form.html', {
+        'order': order,
+        'products_to_review': products_to_review
+    })
+
+@login_required
 def checkout_process(request):
     cart_items = CartItem.objects.filter(user=request.user)
     total = sum(item.product.price * item.quantity for item in cart_items)
@@ -169,7 +201,7 @@ def checkout_process(request):
         
         cart_items.delete()
         messages.success(request, 'Order placed successfully!')
-        return redirect('store:home')
+        return redirect('store:feedback', order_id=order.id)
     
     return render(request, 'checkout/checkout.html', {
         'cart_items': cart_items,
@@ -177,7 +209,7 @@ def checkout_process(request):
     })
 
 def initialize_sample_data():
-    # Create categories first
+    # Create categories
     electronics = Category.objects.create(
         name='Electronics',
         description='Latest gadgets and electronics',
@@ -195,33 +227,35 @@ def initialize_sample_data():
         description='Trendy clothing and accessories',
         banner_url='https://images.unsplash.com/photo-1445205170230-053b83016050?w=500'
     )
-    
-    # Create products with proper category references
-    products = [
+
+    # Create products
+    products_data = [
         {'name': 'Wireless Headphones', 'price': 99.99, 'category': electronics,
          'image_url': 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
          'description': 'High-quality wireless headphones with noise cancellation', 'stock': 100},
-
         {'name': 'Smart Watch', 'price': 199.99, 'category': electronics,
          'image_url': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
          'description': 'Feature-rich smartwatch with fitness tracking', 'stock': 100},
-
         {'name': 'Best Seller Book', 'price': 19.99, 'category': books,
          'image_url': 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=500',
          'description': 'International bestseller, must read', 'stock': 100},
-
         {'name': 'Designer T-Shirt', 'price': 29.99, 'category': fashion,
          'image_url': 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=500',
          'description': 'Comfortable cotton t-shirt with modern design', 'stock': 100},
-
         {'name': 'Laptop Pro', 'price': 1299.99, 'category': electronics,
          'image_url': 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=500',
          'description': 'Powerful laptop for professionals', 'stock': 100},
-
         {'name': 'Classic Novel', 'price': 15.99, 'category': books,
          'image_url': 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=500',
          'description': 'Timeless classic literature', 'stock': 100}
     ]
+
+    # Create products first
+    products = []
+    for product_data in products_data:
+        product = Product.objects.create(**product_data)
+        products.append(product)
+
     
-    for product_data in products:
-        Product.objects.create(**product_data)
+
+  

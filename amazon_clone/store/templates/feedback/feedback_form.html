@@ -1,0 +1,88 @@
+<!-- feedback/feedback_form.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Leave Feedback for Your Order #{{ order.id }}</h2>
+    
+    {% if products_to_review %}
+        <form id="feedbackForm">
+            {% csrf_token %}
+            {% for product in products_to_review %}
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ product.name }}</h5>
+                        <div class="form-group">
+                            <label>Rating:</label>
+                            <select class="form-control rating-select" data-product-id="{{ product.id }}" required>
+                                <option value="">Select a rating</option>
+                                <option value="1">1 - Poor</option>
+                                <option value="2">2 - Fair</option>
+                                <option value="3">3 - Good</option>
+                                <option value="4">4 - Very Good</option>
+                                <option value="5">5 - Excellent</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Comment (optional):</label>
+                            <textarea class="form-control comment-input" data-product-id="{{ product.id }}" rows="2"></textarea>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+            <button type="submit" class="btn btn-primary">Submit Feedback</button>
+        </form>
+    {% else %}
+        <div class="alert alert-info">
+            You've already reviewed all products in this order. Thank you for your feedback!
+        </div>
+        <a href="{% url 'store:home' %}" class="btn btn-secondary">Return to Home</a>
+    {% endif %}
+</div>
+
+<script>
+document.getElementById('feedbackForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = {};
+    const ratingSelects = document.querySelectorAll('.rating-select');
+    const commentInputs = document.querySelectorAll('.comment-input');
+    
+    ratingSelects.forEach(select => {
+        const productId = select.dataset.productId;
+        formData[productId] = {
+            rating: select.value,
+            comment: ''
+        };
+    });
+    
+    commentInputs.forEach(input => {
+        const productId = input.dataset.productId;
+        if (formData[productId]) {
+            formData[productId].comment = input.value;
+        }
+    });
+    
+    fetch(window.location.href, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = "{% url 'store:home' %}";
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error occurred'));
+        }
+    })
+    .catch(error => {
+        alert('Error submitting feedback');
+        console.error(error);
+    });
+});
+</script>
+{% endblock %}

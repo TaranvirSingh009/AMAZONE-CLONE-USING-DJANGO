@@ -1,5 +1,8 @@
 from django.urls import path
 from . import views
+from .views_api import ReviewListCreateView, ProductReviewsView
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
 
 app_name = 'store'
 
@@ -15,4 +18,7 @@ urlpatterns = [
     path('cart/remove/<int:item_id>/', views.remove_from_cart, name='remove_from_cart'),
     path('cart/update/<int:item_id>/', views.update_cart, name='update_cart'),
     path('checkout/', views.checkout_process, name='checkout_process'),
+    path('api/products/<int:product_id>/reviews/', ReviewListCreateView.as_view(), name='product-reviews'),
+    path('api/products/<int:id>/with-reviews/', ProductReviewsView.as_view(), name='product-with-reviews'),
+    path('feedback/<int:order_id>/', views.feedback_view, name='feedback'),
 ]

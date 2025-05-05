@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import User, Category, Product, CartItem, Order, OrderItem
+from .models import Review
 
 # Custom User Admin to display all fields
 class CustomUserAdmin(UserAdmin):
@@ -53,6 +54,12 @@ class CartItemAdmin(admin.ModelAdmin):
     list_filter = ('user',)
     raw_id_fields = ('user', 'product')
 
+class ReviewAdmin(admin.ModelAdmin):
+    list_display = ('user', 'product', 'rating', 'created_at')
+    list_filter = ('rating', 'created_at')
+    search_fields = ('user__username', 'product__name', 'comment')
+    raw_id_fields = ('user', 'product')
+
 # Register all models
 admin.site.register(User, CustomUserAdmin)
 admin.site.register(Category, CategoryAdmin)
@@ -60,3 +67,4 @@ admin.site.register(Product, ProductAdmin)
 admin.site.register(CartItem, CartItemAdmin)
 admin.site.register(Order, OrderAdmin)
 admin.site.register(OrderItem)
+admin.site.register(Review, ReviewAdmin)
